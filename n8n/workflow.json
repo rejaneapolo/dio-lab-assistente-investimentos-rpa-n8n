@@ -1,0 +1,242 @@
+{
+  "name": "Assistende de Investimento - Dio",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "Clientes",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1376,
+        -80
+      ],
+      "id": "6feea295-ceb3-4462-bc01-84842cd9f840",
+      "name": "Webhook - Clientes",
+      "webhookId": "c2abda40-10c1-4cd4-87ce-d8722bdfd8c8"
+    },
+    {
+      "parameters": {
+        "url": "https://digitalinnovationone.github.io/dio-lab-assistente-investimentos-rpa-n8n/data.csv",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -1168,
+        -80
+      ],
+      "id": "1e8e2272-d907-4821-b38f-a59e4b9c766b",
+      "name": "HTTP Request - BuscarInvestimento"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Tenta buscar os dados do Webhook. Se não houver, usa os clientes de exemplo para testes.\nlet clientes = [];\ntry {\n  const dadosWebhook = $('Webhook - Clientes').first().json;\n  // Verifica se os clientes vieram numa propriedade específica ou se o objeto já é a lista\n  clientes = dadosWebhook.clientes || (Array.isArray(dadosWebhook) ? dadosWebhook : []);\n} catch (e) {\n  clientes = [];\n}\n\n// Se o webhook estiver vazio, usamos estes dados de teste para o fluxo não travar\nif (!clientes || clientes.length === 0) {\n  clientes = [\n    { nome: \"Ana Silva\", email: \"ana@email.com\", saldo: \"R$ 12.500,00\", perfil: \"Conservador\" },\n    { nome: \"Bruno Lima\", email: \"bruno@email.com\", saldo: \"R$ 3.200,00\", perfil: \"Moderado\" },\n    { nome: \"Carla Souza\", email: \"carla@email.com\", saldo: \"R$ 28.900,00\", perfil: \"Arrojado\" },\n    { nome: \"Daniel Oliveira\", email: \"daniel@email.com\", saldo: \"R$ 850,00\", perfil: \"Conservador\" },\n    { nome: \"Elena Rodrigues\", email: \"elena@email.com\", saldo: \"R$ 45.000,00\", perfil: \"Arrojado\" }\n  ];\n}\n\n// 2. Pega o conteúdo do CSV do nó HTTP Request\nconst csvItem = $('HTTP Request - BuscarInvestimento').first().json;\nconst csvText = csvItem.data || csvItem.body || csvItem.text || \"\";\n\n// Função para converter o texto CSV em array de objetos JSON\nfunction parseCSV(text) {\n  const lines = text.trim().split('\\n');\n  if (lines.length === 0) return [];\n  const headers = lines[0].split(',').map(h => h.trim());\n  \n  const result = [];\n  for (let i = 1; i < lines.length; i++) {\n    const currentLine = lines[i].split(',').map(val => val.trim());\n    if (currentLine.length === headers.length) {\n      const obj = {};\n      for (let j = 0; j < headers.length; j++) {\n        obj[headers[j]] = currentLine[j];\n      }\n      result.push(obj);\n    }\n  }\n  return result;\n}\n\nconst todosInvestimentos = parseCSV(csvText);\n\n// 3. Mapeia cada cliente e filtra APENAS os investimentos do seu perfil\nreturn clientes.map(cliente => {\n  const perfilCliente = cliente.perfil ? cliente.perfil.trim() : \"\";\n  \n  const investimentosFiltrados = todosInvestimentos.filter(\n    inv => inv.perfil && inv.perfil.trim().toLowerCase() === perfilCliente.toLowerCase()\n  );\n\n  return {\n    json: {\n      nome: cliente.nome,\n      email: cliente.email,\n      saldo: cliente.saldo,\n      perfil: perfilCliente,\n      investimentosCompativeis: investimentosFiltrados\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -912,
+        -80
+      ],
+      "id": "6e21da87-edb4-4b8a-9451-b8474d3bca25",
+      "name": "Code - NormalizaDados"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Você é uma assistente de investimentos digital, especialista em finanças, empática e objetiva.\nAnalise os dados do cliente e as opções de investimentos compatíveis com o perfil dele:\n\nDados do Cliente:\n- Nome: {{$json.nome}}\n- E-mail: {{$json.email}}\n- Saldo Disponível: {{$json.saldo}}\n- Perfil de Risco: {{$json.perfil}}\n\nOpções de Investimentos Compatíveis com o Perfil:\n{{JSON.stringify($json.investimentosCompativeis)}}\n\nSua tarefa:\n1. Escolha a melhor opção de investimento da lista fornecida com base no perfil e no saldo do cliente.\n2. Escreva uma mensagem de e-mail personalizada, clara e profissional.\n\nIMPORTANTE: Você DEVE retornar a resposta estritamente no formato JSON válido, contendo exatamente duas chaves:\n- \"assunto\": O assunto do e-mail (ex: \"Sua Recomendação de Investimento: [Nome do Produto]\").\n- \"body_html\": O corpo completo do e-mail formatado em HTML (utilize tags como <p>, <br>, <strong> para estruturar o texto de forma limpa e bonita).\n\nExemplo do formato esperado:\n{\n  \"assunto\": \"...\",\n  \"body_html\": \"<p>Olá...</p>\"\n}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -736,
+        -80
+      ],
+      "id": "414603b6-52a4-4640-bbf9-7b8f1dcae0e0",
+      "name": "AI Agent",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -736,
+        128
+      ],
+      "id": "f1b2a5f1-0ce6-4694-b583-c643142725fa",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "T3Uv0xTgVICaZXdo",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Code - NormalizaDados').item.json.email }}",
+        "subject": "={{ $json.assunto }}",
+        "message": "={{ $json.body_html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -192,
+        -80
+      ],
+      "id": "365c3f36-007b-4151-b997-828eed2a3b9a",
+      "name": "Send a message",
+      "webhookId": "369b255b-c78c-4162-8588-23ebdadaa2a1",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ipUFU4msFE3eoHax",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  let parsedContent;\n  try {\n    // Remove crases de markdown e espaços extras caso a IA mande ```json ... ```\n    let rawOutput = item.json.output.replace(/```json/g, '').replace(/```/g, '').trim();\n    parsedContent = JSON.parse(rawOutput);\n  } catch (e) {\n    // Se ainda assim falhar, tenta extrair o texto bruto para não perder o e-mail\n    parsedContent = { \n      assunto: \"Sua Recomendação de Investimento\", \n      body_html: item.json.output \n    };\n  }\n  \n  return {\n    json: {\n      ...item.json,\n      assunto: parsedContent.assunto,\n      body_html: parsedContent.body_html\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -368,
+        -80
+      ],
+      "id": "958742dd-20b9-40c8-9e1b-33d5715ebc31",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -32,
+        -80
+      ],
+      "id": "099a2f03-3a30-44fb-a2e1-2804fd4eab2c",
+      "name": "Wait",
+      "webhookId": "2efaaeb1-46b5-4f36-b89e-29c8d54e5a06"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Clientes": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - BuscarInvestimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - BuscarInvestimento": {
+      "main": [
+        [
+          {
+            "node": "Code - NormalizaDados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - NormalizaDados": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        []
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "d9b1e471-741d-4af9-9fab-f68f62f0ab69",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "873b7b3f0e7be0082dbd1d62d6db467428cec05cd477952f2558dbd0df16e3bb"
+  },
+  "nodeGroups": [],
+  "id": "7KQwe6IPCDJFKtcQ",
+  "tags": []
+}
